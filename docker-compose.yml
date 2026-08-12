@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: f1-app-running
+    ports:
+      - "5000:5000"
+    environment:
+      - DB_HOST=db
+      - DB_NAME=f1_telemetry
+      - DB_USER=f1_admin
+      - DB_PASS=formula1pass
+    depends_on:
+      - db
+
+  db:
+    image: postgres:15-alpine
+    container_name: f1-postgres-db
+    environment:
+      POSTGRES_DB: f1_telemetry
+      POSTGRES_USER: f1_admin
+      POSTGRES_PASSWORD: formula1pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - f1_db_data:/var/lib/postgresql/data
+
+volumes:
+  f1_db_data:
