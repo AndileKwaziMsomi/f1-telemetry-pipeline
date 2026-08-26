@@ -1,6 +1,6 @@
 import os
 import time
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template_string
 from sqlalchemy import create_engine, text
 import fastf1
 import pandas as pd
@@ -76,6 +76,72 @@ def fetch_f1_data():
         conn.commit()
 
     return jsonify({"status": "success", "message": "Jeddah GP telemetry synced to database!"})
+
+@app.route('/dashboard')
+def dashboard():
+    """Render interactive lap comparison chart for VER and LEC."""
+    with engine.connect() as conn:
+        result = conn.execute(text("""
+            SELECT driver, lap_number, lap_time_sec 
+            FROM driver_laps 
+            ORDER BY lap_number ASC;
+        """)).fetchall()
+
+    # Format data for Chart.js
+    laps_ver = [row.lap_time_sec for row in result if row.driver == 'VER']
+    laps_lec = [row.lap_time_sec for row in result if row.driver == 'LEC']
+    labels = list(range(1, max(len(laps_ver), len(laps_lec)) + 1)) if (laps_ver or laps_lec) else []
+
+    html_template = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>F1 Telemetry Dashboard - Jeddah GP</title>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 40px; background-color: #1e1e1e; color: #fff; }
+            .chart-container { width: 80%; margin: auto; }
+        </style>
+    </head>
+    <body>
+        <h2 style="text-align: center;">2024 Saudi Arabian GP: Verstappen vs Leclerc Pace</h2>
+        <div class="chart-container">
+            <canvas id="lapChart"></canvas>
+        </div>
+        <script>
+            const ctx = document.getElementById('lapChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: {{ labels | tojson }},
+                    datasets: [
+                        {
+                            label: 'Max Verstappen (VER)',
+                            data: {{ laps_ver | tojson }},
+                            borderColor: '#0600EF',
+                            tension: 0.1
+                        },
+                        {
+                            label: 'Charles Leclerc (LEC)',
+                            data: {{ laps_lec | tojson }},
+                            borderColor: '#E8002D',
+                            tension: 0.1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { title: { display: true, text: 'Lap Number', color: '#fff' } },
+                        y: { title: { display: true, text: 'Lap Time (Seconds)', color: '#fff' } }
+                    }
+                }
+            });
+        </script>
+    </body>
+    </html>
+    """
+    return render_template_string(html_template, labels=labels, laps_ver=laps_ver, laps_lec=laps_lec)
 
 if __name__ == '__main__':
     init_db()
